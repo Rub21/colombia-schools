@@ -7,10 +7,27 @@ Genera PMTiles de los límites de Colombia (país, departamentos y municipios) c
 1. Datos fuente: [data/README.md](data/README.md)
 2. Generar los tiles: [scripts/README.md](scripts/README.md)
 
-## Subir tiles
+## Sitio
 
-Pendiente.
+`site/` tiene el mapa (`index.html`) y los tiles (`site/tiles/`). Cada push a `main` que toca `site/` lo publica en la rama `gh-pages` con [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
 
-## Sitio para ver los tiles
+- Sitio: https://rub21.github.io/colombia-schools/
+- Tiles: `https://rub21.github.io/colombia-schools/tiles/municipios.pmtiles`
 
-Pendiente.
+La primera vez hay que activar Pages en GitHub: Settings → Pages → Deploy from a branch → `gh-pages` / `/ (root)`.
+
+### Insertar el mapa en PeopleSoft
+
+El mapa se carga en un iframe y recibe los datos con `postMessage`. Cuando está listo envía `{type: "map-ready"}` y espera `{type: "map-data", title, values}`, donde `values` es `{"05001": 120, ...}` (código DANE del municipio → cantidad). [site/embed-example.html](site/embed-example.html) tiene el código completo; en PeopleSoft `data` es `%Bind(:1)`.
+
+Para limitar quién puede enviar datos, agrega el dominio de PeopleSoft a `ALLOWED_ORIGINS` en `site/index.html`.
+
+### Probar en local
+
+PMTiles necesita range requests, y `python3 -m http.server` no los soporta.
+
+```bash
+npx http-server site -c-1
+```
+
+Abrir http://localhost:8080/embed-example.html

@@ -8,6 +8,3 @@ __pycache__/
 
 # Datos fuente (se descargan, ver README)
 data/mgn2025/
-
-# Salidas generadas
-data/tiles/*.pmtiles

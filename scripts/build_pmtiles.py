@@ -8,7 +8,7 @@ from the DEPARTAMENTOS and MUNICIPIOS xlsx. MGN carries DANE codes, so the
 join is by code. MGN has no country layer; país is the union of departamentos.
 
 Usage: python3 scripts/build_pmtiles.py
-Output: data/tiles/*.pmtiles and data/tiles/match_report.csv
+Output: site/tiles/*.pmtiles and data/tiles/match_report.csv
 """
 import re
 import subprocess
@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 MGN = DATA / "mgn2025"
 OUT = DATA / "tiles"
+TILES = ROOT / "site" / "tiles"  # published with the site
 
 # xlsx code -> DANE code, where PeopleSoft uses an old code
 CODE_REMAP = {
@@ -85,6 +86,7 @@ def tippecanoe(gdf, layer, out, minzoom, maxzoom):
 
 def main():
     OUT.mkdir(exist_ok=True)
+    TILES.mkdir(parents=True, exist_ok=True)
     pais, deptos, mpios = load_catalogs()
 
     g1 = gpd.read_file(MGN / "MGN_ADM_DPTO_POLITICO.shp")
@@ -126,9 +128,9 @@ def main():
     print(f"municipios: {g2.descr.notna().sum()}/{len(g2)} con código en xlsx; "
           f"{len(mpios.keys() - mgn_mpios)}/{len(mpios)} códigos xlsx sin polígono")
 
-    tippecanoe(g0, "pais", OUT / "pais.pmtiles", 0, 10)
-    tippecanoe(g1, "departamentos", OUT / "departamentos.pmtiles", 0, 12)
-    tippecanoe(g2, "municipios", OUT / "municipios.pmtiles", 0, 14)
+    tippecanoe(g0, "pais", TILES / "pais.pmtiles", 0, 10)
+    tippecanoe(g1, "departamentos", TILES / "departamentos.pmtiles", 0, 12)
+    tippecanoe(g2, "municipios", TILES / "municipios.pmtiles", 0, 14)
 
 
 if __name__ == "__main__":

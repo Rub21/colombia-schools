@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Colombia por municipio</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+  <style>
+    :root {
+      color-scheme: light;
+      --surface: #fcfcfb;
+      --ink: #1a1a19;
+      --ink-muted: #6b6b68;
+      --border: #dddcd8;
+    }
+    html, body, #map { height: 100%; margin: 0; }
+    body { background: var(--surface); color: var(--ink); font: 13px/1.4 system-ui, sans-serif; }
+    .panel {
+      position: absolute; left: 12px; bottom: 28px; padding: 10px 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .panel h1 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+    .legend-row { display: flex; align-items: center; gap: 8px; color: var(--ink-muted); }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+    #status { color: var(--ink-muted); }
+    .maplibregl-popup-content { padding: 8px 10px; font: 13px/1.4 system-ui, sans-serif; color: var(--ink); }
+    .tip-name { font-weight: 600; }
+    .tip-sub { color: var(--ink-muted); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <h1 id="title">Registros por municipio</h1>
+    <div id="legend"></div>
+    <div id="status">Esperando datos…</div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+  <script>
+    // Origins allowed to send data with postMessage. Empty = any origin.
+    // Add the PeopleSoft domain here, e.g. "https://campus.example.edu.co".
+    const ALLOWED_ORIGINS = [];
+
+    const ATTRIBUTION = "DANE MGN 2025";
+    // Sequential blue ramp, light -> dark
+    const RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"];
+    const NO_DATA = "#f0efec";
+    // Mainland plus San Andrés y Providencia
+    const BOUNDS = [[-81.8, -4.3], [-66.8, 13.5]];
+
+    const tiles = (name) => "pmtiles://" + new URL(`tiles/${name}.pmtiles`, location.href).href;
+
+    maplibregl.addProtocol("pmtiles", new pmtiles.Protocol().tile);
+
+    const map = new maplibregl.Map({
+      container: "map",
+      bounds: BOUNDS,
+      fitBoundsOptions: { padding: 20 },
+      maxZoom: 14,
+      attributionControl: { compact: true },
+      style: {
+        version: 8,
+        sources: {
+          pais: { type: "vector", url: tiles("pais"), attribution: ATTRIBUTION },
+          departamentos: { type: "vector", url: tiles("departamentos"), attribution: ATTRIBUTION },
+          municipios: {
+            type: "vector", url: tiles("municipios"), attribution: ATTRIBUTION,
+            promoteId: { municipios: "cod_mpio" },
+          },
+        },
+        layers: [
+          { id: "background", type: "background", paint: { "background-color": "#fcfcfb" } },
+          {
+            id: "municipios-fill", type: "fill", source: "municipios", "source-layer": "municipios",
+            paint: { "fill-color": NO_DATA },
+          },
+          {
+            id: "municipios-line", type: "line", source: "municipios", "source-layer": "municipios",
+            paint: {
+              "line-color": "#fcfcfb",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.2, 10, 1],
+            },
+          },
+          {
+            id: "municipios-hover", type: "line", source: "municipios", "source-layer": "municipios",
+            paint: {
+              "line-color": "#1a1a19",
+              "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0],
+            },
+          },
+          {
+            id: "departamentos-line", type: "line", source: "departamentos", "source-layer": "departamentos",
+            paint: {
+              "line-color": "#6b6b68",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 10, 1.6],
+            },
+          },
+          {
+            id: "pais-line", type: "line", source: "pais", "source-layer": "pais",
+            paint: { "line-color": "#1a1a19", "line-width": 1.2 },
+          },
+        ],
+      },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    const fmt = new Intl.NumberFormat("es-CO");
+    let values = {};
+    let painted = [];
+    let pending = null;
+    let ready = false;
+
+    // Quantile breaks: upper bound of each class, without repeats.
+    function quantileBreaks(nums, classes) {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const breaks = [];
+      for (let i = 1; i <= classes; i++) {
+        const v = sorted[Math.min(sorted.length - 1, Math.ceil((i * sorted.length) / classes) - 1)];
+        if (breaks[breaks.length - 1] !== v) breaks.push(v);
+      }
+      return breaks;
+    }
+
+    function renderLegend(breaks, colors) {
+      const legend = document.getElementById("legend");
+      legend.replaceChildren();
+      let from = null;
+      breaks.forEach((to, i) => {
+        const row = document.createElement("div");
+        row.className = "legend-row";
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.background = colors[i];
+        const label = document.createElement("span");
+        if (from === null) label.textContent = `≤ ${fmt.format(to)}`;
+        else if (from + 1 >= to) label.textContent = fmt.format(to);
+        else label.textContent = `${fmt.format(from + 1)} – ${fmt.format(to)}`;
+        row.append(swatch, label);
+        legend.append(row);
+        from = to;
+      });
+    }
+
+    function paint(data, title) {
+      for (const id of painted) {
+        map.removeFeatureState({ source: "municipios", sourceLayer: "municipios", id }, "value");
+      }
+      values = data;
+      painted = Object.keys(data);
+      for (const id of painted) {
+        map.setFeatureState({ source: "municipios", sourceLayer: "municipios", id }, { value: data[id] });
+      }
+
+      const nums = Object.values(data).filter((n) => n > 0);
+      const status = document.getElementById("status");
+      if (title) document.getElementById("title").textContent = title;
+      if (!nums.length) {
+        map.setPaintProperty("municipios-fill", "fill-color", NO_DATA);
+        document.getElementById("legend").replaceChildren();
+        status.textContent = "Sin datos";
+        return;
+      }
+
+      const breaks = quantileBreaks(nums, RAMP.length);
+      // With fewer classes than colors, keep the dark end of the ramp
+      const colors = RAMP.slice(RAMP.length - breaks.length);
+      const step = ["step", ["feature-state", "value"], colors[0]];
+      for (let i = 1; i < breaks.length; i++) step.push(breaks[i - 1] + 1, colors[i]);
+
+      map.setPaintProperty("municipios-fill", "fill-color", [
+        "case", [">", ["coalesce", ["feature-state", "value"], 0], 0], step, NO_DATA,
+      ]);
+      renderLegend(breaks, colors);
+      const total = nums.reduce((a, b) => a + b, 0);
+      status.textContent = `${fmt.format(total)} en ${fmt.format(nums.length)} municipios`;
+    }
+
+    // Accepts {"05001": 120, ...}. Drops keys that are not 5-digit DANE codes.
+    function clean(raw) {
+      const out = {};
+      if (!raw || typeof raw !== "object") return out;
+      for (const [k, v] of Object.entries(raw)) {
+        const code = String(k).padStart(5, "0");
+        const n = Number(v);
+        if (/^\d{5}$/.test(code) && Number.isFinite(n)) out[code] = n;
+      }
+      return out;
+    }
+
+    window.addEventListener("message", (e) => {
+      if (ALLOWED_ORIGINS.length && !ALLOWED_ORIGINS.includes(e.origin)) return;
+      if (!e.data || e.data.type !== "map-data") return;
+      const title = typeof e.data.title === "string" ? e.data.title : null;
+      const data = clean(e.data.values);
+      if (ready) paint(data, title);
+      else pending = [data, title];
+    });
+
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+    let hoverId = null;
+
+    function setHover(id) {
+      if (hoverId === id) return;
+      if (hoverId !== null) {
+        map.setFeatureState({ source: "municipios", sourceLayer: "municipios", id: hoverId }, { hover: false });
+      }
+      hoverId = id;
+      if (id !== null) {
+        map.setFeatureState({ source: "municipios", sourceLayer: "municipios", id }, { hover: true });
+      }
+    }
+
+    map.on("mousemove", "municipios-fill", (e) => {
+      const f = e.features[0];
+      setHover(f.id);
+      map.getCanvas().style.cursor = "pointer";
+
+      const box = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "tip-name";
+      name.textContent = f.properties.descr || f.properties.nombre;
+      const sub = document.createElement("div");
+      sub.className = "tip-sub";
+      sub.textContent = `${f.properties.dpto} · ${f.properties.cod_mpio}`;
+      const val = document.createElement("div");
+      val.textContent = f.id in values ? fmt.format(values[f.id]) : "Sin datos";
+      box.append(name, sub, val);
+      popup.setLngLat(e.lngLat).setDOMContent(box).addTo(map);
+    });
+
+    map.on("mouseleave", "municipios-fill", () => {
+      setHover(null);
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+
+    // An iframe can report a wrong size at startup, so refit until the user moves the map
+    let userMoved = false;
+    const fit = () => { if (!userMoved) map.fitBounds(BOUNDS, { padding: 20, animate: false }); };
+    map.on("movestart", (e) => { if (e.originalEvent) userMoved = true; });
+    map.on("resize", fit);
+
+    map.on("load", () => {
+      ready = true;
+      fit();
+      if (pending) paint(...pending);
+      pending = null;
+      // Tell the host page the map can receive data
+      if (window.parent !== window) window.parent.postMessage({ type: "map-ready" }, "*");
+    });
+  </script>
+</body>
+</html>

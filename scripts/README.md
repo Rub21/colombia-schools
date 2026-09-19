@@ -2,7 +2,7 @@
 
 ## build_pmtiles.py
 
-Une los límites del MGN 2025 con los catálogos xlsx por código DANE y genera los PMTiles en `data/tiles/`. Antes de correrlo hay que tener los datos en `data/` (ver [data/README.md](../data/README.md)).
+Une los límites del MGN 2025 con los catálogos xlsx por código DANE y genera los PMTiles en `site/tiles/`. Antes de correrlo hay que tener los datos en `data/` (ver [data/README.md](../data/README.md)).
 
 ### Requisitos
 
@@ -17,7 +17,7 @@ Desde la raíz del proyecto:
 python3 scripts/build_pmtiles.py
 ```
 
-### Salida (`data/tiles/`)
+### Salida (`site/tiles/`)
 
 | archivo | capa | zoom | campos |
 |---|---|---|---|
@@ -27,7 +27,7 @@ python3 scripts/build_pmtiles.py
 
 - `nombre` es el nombre oficial del DANE y `descr` es el nombre que aparece en PeopleSoft.
 - `tipo` puede ser `MUNICIPIO`, `ÁREA NO MUNICIPALIZADA` o `ISLA`.
-- `match_report.csv` lista los códigos que no cruzan entre el xlsx y el MGN.
+- `data/tiles/match_report.csv` lista los códigos que no cruzan entre el xlsx y el MGN.
 
 ### Notas sobre los datos
 
