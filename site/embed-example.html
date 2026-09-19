@@ -19,7 +19,7 @@
         if (e.origin !== MAP_URL.origin) return;
         if (e.data && e.data.type === "map-ready") {
           frame.contentWindow.postMessage(
-            { type: "map-data", title: "Alumnos por municipio", values: data },
+            { type: "map-data", title: "Alumnos", values: data },
             MAP_URL.origin
           );
         }

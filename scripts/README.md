@@ -25,6 +25,7 @@ python3 scripts/build_pmtiles.py
 | `departamentos.pmtiles` | `departamentos` | 0–12 | `cod_pais`, `cod_dpto`, `nombre`, `descr` |
 | `municipios.pmtiles` | `municipios` | 0–14 | `cod_pais`, `cod_dpto`, `cod_mpio`, `nombre`, `descr`, `dpto`, `tipo` |
 
+- `labels.geojson` tiene un punto por departamento y municipio (`nivel`, `codigo`, `label`, `area`) para las etiquetas del mapa. `label` es el nombre del DANE, con tildes.
 - `nombre` es el nombre oficial del DANE y `descr` es el nombre que aparece en PeopleSoft.
 - `tipo` puede ser `MUNICIPIO`, `ÁREA NO MUNICIPALIZADA` o `ISLA`.
 - `data/tiles/match_report.csv` lista los códigos que no cruzan entre el xlsx y el MGN.

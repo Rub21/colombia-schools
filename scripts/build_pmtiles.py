@@ -8,7 +8,7 @@ from the DEPARTAMENTOS and MUNICIPIOS xlsx. MGN carries DANE codes, so the
 join is by code. MGN has no country layer; país is the union of departamentos.
 
 Usage: python3 scripts/build_pmtiles.py
-Output: site/tiles/*.pmtiles and data/tiles/match_report.csv
+Output: site/tiles/*.pmtiles, site/tiles/labels.geojson and data/tiles/match_report.csv
 """
 import re
 import subprocess
@@ -84,6 +84,30 @@ def tippecanoe(gdf, layer, out, minzoom, maxzoom):
         subprocess.run(cmd, check=True)
 
 
+def label_case(name):
+    """'SAN ANDRÉS DE TUMACO' -> 'San Andrés de Tumaco'. DANE names keep their accents."""
+    small = {"De", "Del", "La", "Las", "Los", "El", "Y"}
+    words = name.title().split(" ")
+    return " ".join(w.lower() if i and w in small else w for i, w in enumerate(words))
+
+
+def write_labels(g1, g2, out):
+    """One point per polygon for map labels. Tiled polygons repeat labels on every tile."""
+    def points(gdf, nivel, code):
+        name = gdf.nombre.map(label_case)
+        # area in degrees², only used to show bigger places first
+        return gpd.GeoDataFrame(
+            {"nivel": nivel, "codigo": gdf[code], "label": name, "area": gdf.geometry.area.round(4)},
+            geometry=gdf.geometry.representative_point(), crs=gdf.crs,
+        )
+
+    labels = pd.concat([points(g1, "departamento", "cod_dpto"), points(g2, "municipio", "cod_mpio")])
+    labels = labels.to_crs(4326)
+    labels.geometry = shapely.set_precision(labels.geometry.values, 1e-5)
+    out.unlink(missing_ok=True)
+    labels.to_file(out, driver="GeoJSON", COORDINATE_PRECISION=5)
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     TILES.mkdir(parents=True, exist_ok=True)
@@ -128,6 +152,7 @@ def main():
     print(f"municipios: {g2.descr.notna().sum()}/{len(g2)} con código en xlsx; "
           f"{len(mpios.keys() - mgn_mpios)}/{len(mpios)} códigos xlsx sin polígono")
 
+    write_labels(g1, g2, TILES / "labels.geojson")
     tippecanoe(g0, "pais", TILES / "pais.pmtiles", 0, 10)
     tippecanoe(g1, "departamentos", TILES / "departamentos.pmtiles", 0, 12)
     tippecanoe(g2, "municipios", TILES / "municipios.pmtiles", 0, 14)
